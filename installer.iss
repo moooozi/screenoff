@@ -1,5 +1,5 @@
+#include "version.iss"
 #define MyAppName "ScreenOff"
-#define MyAppVersion "0.1.0"
 #define MyAppPublisher "M Zidane"
 #define MyAppURL "https://github.com/mzidane/screenoff"
 #define MyAppExeName "screenoff.exe"

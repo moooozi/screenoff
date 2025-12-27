@@ -4,14 +4,23 @@ fn main() {
     // Set app_id as environment variable for compile-time access
     println!("cargo:rustc-env=APP_ID=dev.zidane.screenoff");
 
+    let version = env!("CARGO_PKG_VERSION");
+
+    // Generate version.iss for Inno Setup
+    std::fs::write(
+        "version.iss",
+        format!("#define MyAppVersion \"{}\"", version),
+    )
+    .unwrap();
+
     if cfg!(target_os = "windows") {
         WindowsResource::new()
             .set("CompanyName", "M Zidane")
             .set("FileDescription", "Screen Off")
             .set("LegalCopyright", "Copyright (C) 2025 M Zidane")
             .set("ProductName", "Screen Off")
-            .set("ProductVersion", "1.0.0")
-            .set("FileVersion", "1.0.0")
+            .set("ProductVersion", version)
+            .set("FileVersion", version)
             .set("InternalName", "dev.zidane.screenoff")
             .set("OriginalFilename", "screenoff.exe")
             .set_icon("icons/app_icon.ico")
