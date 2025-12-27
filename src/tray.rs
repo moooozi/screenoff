@@ -4,6 +4,10 @@ use windows::Win32::Graphics::Gdi::{
     CreatePen, CreateSolidBrush, DeleteObject, DrawTextW, FillRect, LineTo, MoveToEx, SelectObject,
     SetBkColor, SetTextColor, DT_LEFT, DT_SINGLELINE, DT_VCENTER, HGDIOBJ, PS_SOLID,
 };
+use windows::Win32::System::Registry::{
+    RegCloseKey, RegDeleteValueW, RegOpenKeyExW, RegQueryValueExW, RegSetValueExW, HKEY,
+    HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_SZ,
+};
 use windows::Win32::UI::Controls::{DRAWITEMSTRUCT, MEASUREITEMSTRUCT, ODS_SELECTED, ODT_MENU};
 use windows::Win32::UI::Shell::{Shell_NotifyIconW, NIF_ICON, NIM_MODIFY, NOTIFYICONDATAW};
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -56,6 +60,117 @@ pub fn update_tray_icon(icon_id: u16) {
 
 const WM_MEASUREITEM: u32 = 0x002C;
 const WM_DRAWITEM: u32 = 0x002B;
+
+fn is_startup_enabled() -> bool {
+    unsafe {
+        let subkey: Vec<u16> = "Software\\Microsoft\\Windows\\CurrentVersion\\Run"
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        let value_name: Vec<u16> = "ScreenOff"
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+
+        let mut hkey = HKEY::default();
+        if RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            PCWSTR(subkey.as_ptr()),
+            Some(0),
+            KEY_READ,
+            &mut hkey,
+        )
+        .is_ok()
+        {
+            let mut data: [u16; 512] = [0; 512];
+            let mut data_size = (data.len() * 2) as u32;
+            let result = RegQueryValueExW(
+                hkey,
+                PCWSTR(value_name.as_ptr()),
+                None,
+                None,
+                Some(data.as_mut_ptr() as *mut u8),
+                Some(&mut data_size),
+            );
+            let _ = RegCloseKey(hkey);
+            result.is_ok()
+        } else {
+            false
+        }
+    }
+}
+
+fn toggle_startup() {
+    if is_startup_enabled() {
+        // Remove from startup
+        unsafe {
+            let subkey: Vec<u16> = "Software\\Microsoft\\Windows\\CurrentVersion\\Run"
+                .encode_utf16()
+                .chain(std::iter::once(0))
+                .collect();
+            let value_name: Vec<u16> = "ScreenOff"
+                .encode_utf16()
+                .chain(std::iter::once(0))
+                .collect();
+
+            let mut hkey = HKEY::default();
+            if RegOpenKeyExW(
+                HKEY_CURRENT_USER,
+                PCWSTR(subkey.as_ptr()),
+                Some(0),
+                KEY_WRITE,
+                &mut hkey,
+            )
+            .is_ok()
+            {
+                let _ = RegDeleteValueW(hkey, PCWSTR(value_name.as_ptr()));
+                let _ = RegCloseKey(hkey);
+            }
+        }
+    } else {
+        // Add to startup
+        unsafe {
+            let subkey: Vec<u16> = "Software\\Microsoft\\Windows\\CurrentVersion\\Run"
+                .encode_utf16()
+                .chain(std::iter::once(0))
+                .collect();
+            let value_name: Vec<u16> = "ScreenOff"
+                .encode_utf16()
+                .chain(std::iter::once(0))
+                .collect();
+
+            let exe_path = std::env::current_exe().unwrap();
+            let exe_path_str = format!("\"{}\"", exe_path.display());
+            let exe_path_wide: Vec<u16> = exe_path_str
+                .encode_utf16()
+                .chain(std::iter::once(0))
+                .collect();
+
+            let mut hkey = HKEY::default();
+            if RegOpenKeyExW(
+                HKEY_CURRENT_USER,
+                PCWSTR(subkey.as_ptr()),
+                Some(0),
+                KEY_WRITE,
+                &mut hkey,
+            )
+            .is_ok()
+            {
+                let _ = RegSetValueExW(
+                    hkey,
+                    PCWSTR(value_name.as_ptr()),
+                    Some(0),
+                    REG_SZ,
+                    Some(&std::slice::from_raw_parts(
+                        exe_path_wide.as_ptr() as *const u8,
+                        exe_path_wide.len() * 2,
+                    )),
+                );
+                let _ = RegCloseKey(hkey);
+            }
+        }
+    }
+}
 
 pub unsafe extern "system" fn window_proc(
     hwnd: HWND,
@@ -111,6 +226,10 @@ pub unsafe extern "system" fn window_proc(
                     } else if item_id == 1001 {
                         ("", false, false, true)
                     } else if item_id == 1002 {
+                        ("Start on Sign in", is_startup_enabled(), false, false)
+                    } else if item_id == 1003 {
+                        ("", false, false, true)
+                    } else if item_id == 1004 {
                         ("Exit", false, false, false)
                     } else {
                         ("", false, false, false)
@@ -129,6 +248,10 @@ pub unsafe extern "system" fn window_proc(
                     } else if item_id == all_monitors.len() as u32 + 2 {
                         ("Turn off selected screens", false, false, false)
                     } else if item_id == all_monitors.len() as u32 + 3 {
+                        ("", false, false, true)
+                    } else if item_id == all_monitors.len() as u32 + 4 {
+                        ("Start on Sign in", is_startup_enabled(), false, false)
+                    } else if item_id == all_monitors.len() as u32 + 5 {
                         ("Exit", false, false, false)
                     } else {
                         ("", false, false, false)
@@ -223,8 +346,14 @@ pub fn show_menu(hwnd: HWND, config: &mut Config) {
             // Separator
             let _ = AppendMenuW(hmenu, MF_OWNERDRAW, 1001 as usize, PCWSTR::null());
 
-            // Exit
+            // "Start on Sign in"
             let _ = AppendMenuW(hmenu, MF_OWNERDRAW, 1002 as usize, PCWSTR::null());
+
+            // Separator
+            let _ = AppendMenuW(hmenu, MF_OWNERDRAW, 1003 as usize, PCWSTR::null());
+
+            // Exit
+            let _ = AppendMenuW(hmenu, MF_OWNERDRAW, 1004 as usize, PCWSTR::null());
         } else {
             // Screen on mode: Show full menu
             // Header
@@ -245,8 +374,16 @@ pub fn show_menu(hwnd: HWND, config: &mut Config) {
             let id = (all_monitors.len() + 2) as u32;
             let _ = AppendMenuW(hmenu, MF_OWNERDRAW, id as usize, PCWSTR::null());
 
-            // Exit
+            // Separator
             let id = (all_monitors.len() + 3) as u32;
+            let _ = AppendMenuW(hmenu, MF_OWNERDRAW, id as usize, PCWSTR::null());
+
+            // "Start on Sign in"
+            let id = (all_monitors.len() + 4) as u32;
+            let _ = AppendMenuW(hmenu, MF_OWNERDRAW, id as usize, PCWSTR::null());
+
+            // Exit
+            let id = (all_monitors.len() + 5) as u32;
             let _ = AppendMenuW(hmenu, MF_OWNERDRAW, id as usize, PCWSTR::null());
         }
 
@@ -278,6 +415,10 @@ pub fn show_menu(hwnd: HWND, config: &mut Config) {
                         toggle_monitors(config);
                         break;
                     } else if cmd.0 == 1002 {
+                        // "Start on Sign in"
+                        toggle_startup();
+                        // Continue loop to re-show menu
+                    } else if cmd.0 == 1004 {
                         // Exit
                         PostQuitMessage(0);
                         break;
@@ -305,7 +446,11 @@ pub fn show_menu(hwnd: HWND, config: &mut Config) {
                         // "Turn off selected screens"
                         toggle_monitors(config);
                         break;
-                    } else if index == all_monitors.len() + 2 {
+                    } else if index == all_monitors.len() + 3 {
+                        // "Start on Sign in"
+                        toggle_startup();
+                        // Continue loop to re-show menu
+                    } else if index == all_monitors.len() + 4 {
                         // Exit
                         PostQuitMessage(0);
                         break;

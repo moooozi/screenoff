@@ -7,9 +7,9 @@ fn main() {
     if cfg!(target_os = "windows") {
         WindowsResource::new()
             .set("CompanyName", "M Zidane")
-            .set("FileDescription", "ScreenOff")
+            .set("FileDescription", "Screen Off")
             .set("LegalCopyright", "Copyright (C) 2025 M Zidane")
-            .set("ProductName", "ScreenOff")
+            .set("ProductName", "Screen Off")
             .set("ProductVersion", "1.0.0")
             .set("FileVersion", "1.0.0")
             .set("InternalName", "dev.zidane.screenoff")
