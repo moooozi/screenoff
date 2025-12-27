@@ -15,6 +15,6 @@ Multi-file Windows tray app for toggling secondary monitors using Win32 API dire
 **Debugging Monitor Logic:**
 - Monitor enumeration prints on startup between `=== Detected Monitors ===` markers
 - Toggle actions print "Disabling/Re-enabling" messages
-- Check `screenoff_config.json` in working directory for state
+- Check `config.json` in the App config directory for state
 
 **Hotkey Feature:** Commented-out `RegisterHotKey` calls in code - planned but not implemented
