@@ -5,6 +5,7 @@ mod tray;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::HINSTANCE;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::UI::HiDpi::{SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2};
 use windows::Win32::UI::Shell::{
     Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW,
 };
@@ -15,6 +16,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Set DPI awareness to prevent blurry text
+    unsafe {
+        let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    }
     let mut config = config::load_config();
     config.saved_modes.clear(); // clear old saved modes
     monitors::update_secondary_monitors(&mut config);
