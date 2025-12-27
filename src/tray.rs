@@ -9,8 +9,8 @@ use windows::Win32::UI::Shell::{Shell_NotifyIconW, NIF_ICON, NIM_MODIFY, NOTIFYI
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, DefWindowProcW, DestroyMenu, GetCursorPos, LoadImageW,
     PostMessageW, PostQuitMessage, SetForegroundWindow, TrackPopupMenu, HICON, IMAGE_FLAGS,
-    IMAGE_ICON, MF_OWNERDRAW, TPM_NONOTIFY, TPM_RETURNCMD, WM_DESTROY, WM_LBUTTONUP, WM_NULL,
-    WM_RBUTTONUP, WM_USER,
+    IMAGE_ICON, MF_OWNERDRAW, TPM_NONOTIFY, TPM_RETURNCMD, WM_DESTROY, WM_HOTKEY, WM_LBUTTONUP,
+    WM_NULL, WM_RBUTTONUP, WM_USER,
 };
 
 use crate::config::{save_config, Config};
@@ -78,6 +78,14 @@ pub unsafe extern "system" fn window_proc(
                     if !CONFIG.is_null() {
                         show_menu(hwnd, &mut *CONFIG);
                     }
+                }
+            }
+        }
+        WM_HOTKEY => {
+            // Global hotkey pressed, toggle monitors
+            unsafe {
+                if !CONFIG.is_null() {
+                    toggle_monitors(&mut *CONFIG);
                 }
             }
         }

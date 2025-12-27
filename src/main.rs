@@ -10,6 +10,9 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::HiDpi::{
     SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
 };
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    RegisterHotKey, UnregisterHotKey, HOT_KEY_MODIFIERS, MOD_ALT, MOD_CONTROL,
+};
 use windows::Win32::UI::Shell::{
     Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW,
 };
@@ -89,8 +92,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let _ = unsafe { ShowWindow(hwnd, SW_HIDE) };
 
-    // Register hotkey Ctrl+Alt+S
-    // unsafe { RegisterHotKey(hwnd, 1, HOT_KEY_MODIFIERS::MOD_CONTROL | HOT_KEY_MODIFIERS::MOD_ALT, 'S' as u32) };
+    // Register hotkey CTRL+ALT+T
+    unsafe {
+        if RegisterHotKey(
+            Some(hwnd),
+            1,
+            HOT_KEY_MODIFIERS(MOD_CONTROL.0 | MOD_ALT.0),
+            'T' as u32,
+        )
+        .is_err()
+        {
+            eprintln!("Failed to register hotkey CTRL+ALT+T");
+        } else {
+            eprintln!("Hotkey CTRL+ALT+T registered successfully");
+        }
+    };
 
     let mut nid: NOTIFYICONDATAW = unsafe { std::mem::zeroed() };
     nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
@@ -114,7 +130,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let _ = unsafe { Shell_NotifyIconW(NIM_DELETE, &nid) };
-    // unsafe { UnregisterHotKey(hwnd, 1) };
+    let _ = unsafe { UnregisterHotKey(Some(hwnd), 1) };
     unsafe {
         let _ = Box::from_raw(tray::CONFIG);
     };

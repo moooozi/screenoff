@@ -7,7 +7,7 @@ A Windows system tray application that allows you to quickly disable/enable seco
 - **System Tray Icon**: Minimalist tray application with no visible window
 - **Left Click**: Toggle secondary monitors on/off
 - **Right Click**: Configure which monitors are considered "secondary"
-- **Keyboard Shortcut**: Press `Ctrl + Alt + M` to toggle monitors from anywhere
+- **Keyboard Shortcut**: Press `Ctrl + Alt + T` to toggle monitors from anywhere
 - **Persistent Configuration**: Your monitor settings are saved in `screenoff_config.json`
 
 ## Usage
@@ -30,7 +30,7 @@ A Windows system tray application that allows you to quickly disable/enable seco
 
 4. **Toggle monitors**:
    - Left-click the tray icon, OR
-   - Press `Ctrl + Alt + M`
+   - Press `Ctrl + Alt + T`
 
 ## How It Works
 
