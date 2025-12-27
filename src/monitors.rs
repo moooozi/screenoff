@@ -1,46 +1,100 @@
 use std::collections::HashMap;
 use windows::core::PCWSTR;
+use windows::Win32::Devices::Display::{
+    DisplayConfigGetDeviceInfo, GetDisplayConfigBufferSizes, QueryDisplayConfig,
+    DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME, DISPLAYCONFIG_DEVICE_INFO_HEADER,
+    DISPLAYCONFIG_MODE_INFO, DISPLAYCONFIG_PATH_INFO, DISPLAYCONFIG_TARGET_DEVICE_NAME,
+    QDC_ONLY_ACTIVE_PATHS,
+};
+use windows::Win32::Foundation::WIN32_ERROR;
 use windows::Win32::Graphics::Gdi::{
     ChangeDisplaySettingsExW, EnumDisplayDevicesW, EnumDisplaySettingsW, CDS_TYPE, DEVMODEW,
     DISPLAY_DEVICEW, DISPLAY_DEVICE_PRIMARY_DEVICE, DISP_CHANGE_SUCCESSFUL, ENUM_CURRENT_SETTINGS,
 };
-use wmi::{COMLibrary, WMIConnection};
 
 use crate::config::{save_config, Config};
 
 pub fn get_monitor_friendly_names() -> HashMap<String, String> {
     let mut names = HashMap::new();
-    if let Ok(com_lib) = COMLibrary::new() {
-        if let Ok(wmi_con) = WMIConnection::with_namespace_path("root\\wmi", com_lib) {
-            #[derive(serde::Deserialize, Debug)]
-            #[allow(non_snake_case)]
-            struct WmiMonitorID {
-                InstanceName: String,
-                UserFriendlyName: Vec<u8>,
-            }
-            if let Ok(results) = wmi_con.query::<WmiMonitorID>() {
-                for monitor in results {
-                    if let Some(model_start) = monitor.InstanceName.find('\\') {
-                        if let Some(model_end) = monitor.InstanceName[model_start + 1..].find('\\')
-                        {
-                            let model =
-                                &monitor.InstanceName[model_start + 1..model_start + 1 + model_end];
-                            let friendly = String::from_utf8_lossy(&monitor.UserFriendlyName)
-                                .trim_matches('\0')
-                                .to_string();
-                            if !friendly.is_empty() {
-                                names.insert(model.to_string(), friendly);
-                            }
+
+    let mut path_count = 0u32;
+    let mut mode_count = 0u32;
+
+    unsafe {
+        // Get buffer sizes
+        if GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &mut path_count, &mut mode_count)
+            != WIN32_ERROR(0)
+        {
+            eprintln!("Failed to get display config buffer sizes");
+            return names;
+        }
+
+        let mut paths: Vec<DISPLAYCONFIG_PATH_INFO> = vec![std::mem::zeroed(); path_count as usize];
+        let mut modes: Vec<DISPLAYCONFIG_MODE_INFO> = vec![std::mem::zeroed(); mode_count as usize];
+
+        // Query display configuration
+        if QueryDisplayConfig(
+            QDC_ONLY_ACTIVE_PATHS,
+            &mut path_count,
+            paths.as_mut_ptr(),
+            &mut mode_count,
+            modes.as_mut_ptr(),
+            None,
+        ) != WIN32_ERROR(0)
+        {
+            eprintln!("Failed to query display config");
+            return names;
+        }
+
+        // Get friendly names for each active path
+        for i in 0..path_count as usize {
+            let path = &paths[i];
+            let adapter_id = path.targetInfo.adapterId;
+            let target_id = path.targetInfo.id;
+
+            let mut target_name: DISPLAYCONFIG_TARGET_DEVICE_NAME = std::mem::zeroed();
+            target_name.header.r#type = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
+            target_name.header.size =
+                std::mem::size_of::<DISPLAYCONFIG_TARGET_DEVICE_NAME>() as u32;
+            target_name.header.adapterId = adapter_id;
+            target_name.header.id = target_id;
+
+            if DisplayConfigGetDeviceInfo(
+                &mut target_name.header as *mut DISPLAYCONFIG_DEVICE_INFO_HEADER,
+            ) == 0
+            {
+                // Extract friendly name from wide string
+                let friendly_name_len = target_name
+                    .monitorFriendlyDeviceName
+                    .iter()
+                    .position(|&c| c == 0)
+                    .unwrap_or(target_name.monitorFriendlyDeviceName.len());
+                let friendly_name = String::from_utf16_lossy(
+                    &target_name.monitorFriendlyDeviceName[..friendly_name_len],
+                );
+
+                // Get device path to extract model
+                let device_path_len = target_name
+                    .monitorDevicePath
+                    .iter()
+                    .position(|&c| c == 0)
+                    .unwrap_or(target_name.monitorDevicePath.len());
+                let device_path =
+                    String::from_utf16_lossy(&target_name.monitorDevicePath[..device_path_len]);
+
+                // Extract model from device path: \\?\DISPLAY#MODEL#...
+                if let Some(start) = device_path.find('#') {
+                    if let Some(end) = device_path[start + 1..].find('#') {
+                        let model = device_path[start + 1..start + 1 + end].to_string();
+                        if !friendly_name.is_empty() && !model.is_empty() {
+                            names.insert(model, friendly_name);
                         }
                     }
                 }
             }
-        } else {
-            eprintln!("WMI connection failed");
         }
-    } else {
-        eprintln!("COM lib failed");
     }
+
     names
 }
 
