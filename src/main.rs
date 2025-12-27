@@ -14,8 +14,8 @@ use windows::Win32::UI::Shell::{
     Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DispatchMessageW, GetMessageW, LoadIconW, RegisterClassW, ShowWindow,
-    TranslateMessage, CW_USEDEFAULT, IDI_APPLICATION, MSG, SW_HIDE, WINDOW_EX_STYLE, WM_USER,
+    CreateWindowExW, DispatchMessageW, GetMessageW, RegisterClassW, ShowWindow,
+    TranslateMessage, CW_USEDEFAULT, MSG, SW_HIDE, WINDOW_EX_STYLE, WM_USER,
     WNDCLASSW, WS_OVERLAPPEDWINDOW,
 };
 
@@ -36,11 +36,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     eprintln!("=========================");
 
+    let icon_id = if config.saved_modes.is_empty() {
+        tray::IDI_SCREEN_ON
+    } else {
+        tray::IDI_SCREEN_OFF
+    };
+
     let config_box = Box::new(config);
     unsafe { tray::CONFIG = Box::into_raw(config_box) };
 
     let hinstance = unsafe { GetModuleHandleW(PCWSTR::null()) }.unwrap();
     let hinstance = HINSTANCE(hinstance.0);
+    unsafe { tray::HINSTANCE = hinstance };
     let class_name_wide: Vec<u16> = "ScreenOffTrayClass"
         .encode_utf16()
         .chain(std::iter::once(0))
@@ -75,6 +82,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     .unwrap();
 
+    unsafe { tray::TRAY_HWND = hwnd };
+
     let _ = unsafe { ShowWindow(hwnd, SW_HIDE) };
 
     // Register hotkey Ctrl+Alt+S
@@ -86,7 +95,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     nid.uID = 1;
     nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid.uCallbackMessage = WM_USER;
-    nid.hIcon = unsafe { LoadIconW(None, IDI_APPLICATION) }.unwrap();
+    nid.hIcon = tray::load_icon_from_resource(icon_id);
     let tip = "Screen Off";
     let tip_wide: Vec<u16> = tip.encode_utf16().chain(std::iter::once(0)).collect();
     nid.szTip[..tip_wide.len()].copy_from_slice(&tip_wide);

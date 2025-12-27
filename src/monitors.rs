@@ -224,6 +224,11 @@ pub fn toggle_monitors(config: &mut Config) {
         config.saved_modes.clear();
     }
     save_config(config);
+    crate::tray::update_tray_icon(if config.saved_modes.is_empty() {
+        crate::tray::IDI_SCREEN_ON
+    } else {
+        crate::tray::IDI_SCREEN_OFF
+    });
 }
 
 pub fn update_secondary_monitors(config: &mut Config) {

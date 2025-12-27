@@ -5,16 +5,53 @@ use windows::Win32::Graphics::Gdi::{
     SetBkColor, SetTextColor, DT_LEFT, DT_SINGLELINE, DT_VCENTER, HGDIOBJ, PS_SOLID,
 };
 use windows::Win32::UI::Controls::{DRAWITEMSTRUCT, MEASUREITEMSTRUCT, ODS_SELECTED, ODT_MENU};
+use windows::Win32::UI::Shell::{Shell_NotifyIconW, NIF_ICON, NIM_MODIFY, NOTIFYICONDATAW};
 use windows::Win32::UI::WindowsAndMessaging::{
-    AppendMenuW, CreatePopupMenu, DefWindowProcW, DestroyMenu, GetCursorPos, PostMessageW,
-    PostQuitMessage, SetForegroundWindow, TrackPopupMenu, MF_OWNERDRAW, TPM_NONOTIFY,
-    TPM_RETURNCMD, WM_DESTROY, WM_LBUTTONUP, WM_NULL, WM_RBUTTONUP, WM_USER,
+    AppendMenuW, CreatePopupMenu, DefWindowProcW, DestroyMenu, GetCursorPos, LoadImageW,
+    PostMessageW, PostQuitMessage, SetForegroundWindow, TrackPopupMenu, HICON, IMAGE_ICON,
+    LR_LOADFROMFILE, MF_OWNERDRAW, TPM_NONOTIFY, TPM_RETURNCMD, WM_DESTROY, WM_LBUTTONUP, WM_NULL,
+    WM_RBUTTONUP, WM_USER,
 };
 
 use crate::config::{save_config, Config};
 use crate::monitors::{get_monitors, toggle_monitors};
 
 pub static mut CONFIG: *mut Config = std::ptr::null_mut();
+
+pub static mut TRAY_HWND: HWND = HWND(std::ptr::null_mut());
+
+pub static mut HINSTANCE: windows::Win32::Foundation::HINSTANCE = windows::Win32::Foundation::HINSTANCE(std::ptr::null_mut());
+
+pub const IDI_SCREEN_ON: u16 = 101;
+pub const IDI_SCREEN_OFF: u16 = 102;
+
+pub fn load_icon_from_resource(id: u16) -> HICON {
+    unsafe {
+        HICON(
+            LoadImageW(
+                Some(HINSTANCE),
+                PCWSTR((id as usize) as *mut u16),
+                IMAGE_ICON,
+                0,
+                0,
+                IMAGE_FLAGS(0),
+            )
+            .unwrap()
+            .0,
+        )
+    }
+}
+
+pub fn update_tray_icon(icon_id: u16) {
+    let hicon = load_icon_from_resource(icon_id);
+    let mut nid: NOTIFYICONDATAW = unsafe { std::mem::zeroed() };
+    nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
+    nid.hWnd = unsafe { TRAY_HWND };
+    nid.uID = 1;
+    nid.uFlags = NIF_ICON;
+    nid.hIcon = hicon;
+    unsafe { Shell_NotifyIconW(NIM_MODIFY, &nid).unwrap() };
+}
 
 const WM_MEASUREITEM: u32 = 0x002C;
 const WM_DRAWITEM: u32 = 0x002B;

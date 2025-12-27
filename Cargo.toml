@@ -2,6 +2,15 @@
 name = "screenoff"
 version = "0.1.0"
 edition = "2021"
+authors = ["M Zidane"]
+license = "GPL-3.0-or-later"
+description = "A Windows tray application to toggle secondary monitors on/off"
+
+[package.metadata]
+app_id = "dev.zidane.screenoff"
+
+[build-dependencies]
+winres = "0.1"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
