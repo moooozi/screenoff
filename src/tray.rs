@@ -1,15 +1,23 @@
-use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
-use windows::Win32::UI::WindowsAndMessaging::{
-    AppendMenuW, CreatePopupMenu, DefWindowProcW, DestroyMenu, GetCursorPos,
-    PostQuitMessage, TrackPopupMenu, MF_CHECKED, MF_DISABLED, MF_SEPARATOR, MF_STRING, MF_UNCHECKED, TPM_NONOTIFY,
-    TPM_RETURNCMD, WM_DESTROY, WM_LBUTTONUP, WM_RBUTTONUP, WM_USER,
-};
 use windows::core::PCWSTR;
+use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
+use windows::Win32::Graphics::Gdi::{
+    CreatePen, CreateSolidBrush, DeleteObject, DrawTextW, FillRect, LineTo, MoveToEx, SelectObject,
+    SetBkColor, SetTextColor, DT_LEFT, DT_SINGLELINE, DT_VCENTER, HGDIOBJ, PS_SOLID,
+};
+use windows::Win32::UI::Controls::{DRAWITEMSTRUCT, MEASUREITEMSTRUCT, ODS_SELECTED, ODT_MENU};
+use windows::Win32::UI::WindowsAndMessaging::{
+    AppendMenuW, CreatePopupMenu, DefWindowProcW, DestroyMenu, GetCursorPos, PostMessageW,
+    PostQuitMessage, SetForegroundWindow, TrackPopupMenu, MF_OWNERDRAW, TPM_NONOTIFY,
+    TPM_RETURNCMD, WM_DESTROY, WM_LBUTTONUP, WM_NULL, WM_RBUTTONUP, WM_USER,
+};
 
-use crate::config::{Config, save_config};
+use crate::config::{save_config, Config};
 use crate::monitors::{get_monitors, toggle_monitors};
 
 pub static mut CONFIG: *mut Config = std::ptr::null_mut();
+
+const WM_MEASUREITEM: u32 = 0x002C;
+const WM_DRAWITEM: u32 = 0x002B;
 
 pub unsafe extern "system" fn window_proc(
     hwnd: HWND,
@@ -35,6 +43,101 @@ pub unsafe extern "system" fn window_proc(
                 }
             }
         }
+        WM_MEASUREITEM => {
+            let measure_item = unsafe { &mut *(lparam.0 as *mut MEASUREITEMSTRUCT) };
+            if measure_item.CtlType == ODT_MENU {
+                measure_item.itemWidth = 250;
+                measure_item.itemHeight = 30;
+                return LRESULT(1);
+            }
+        }
+        WM_DRAWITEM => {
+            let draw_item = unsafe { &mut *(lparam.0 as *mut DRAWITEMSTRUCT) };
+            if draw_item.CtlType == ODT_MENU {
+                let item_id = draw_item.itemID;
+                let all_monitors = get_monitors();
+                let (text, checked, disabled) = if item_id == 0 {
+                    ("Select Monitors to turn off:", false, true)
+                } else if item_id <= all_monitors.len() as u32 {
+                    let index = (item_id - 1) as usize;
+                    let (monitor, friendly_name) = &all_monitors[index];
+                    let checked = unsafe { (*CONFIG).secondary_monitors.contains(monitor) };
+                    (friendly_name.as_str(), checked, false)
+                } else if item_id == all_monitors.len() as u32 + 1 {
+                    // separator, but we'll handle separately
+                    ("", false, false)
+                } else if item_id == all_monitors.len() as u32 + 2 {
+                    ("Exit", false, false)
+                } else {
+                    ("", false, false)
+                };
+                if item_id == all_monitors.len() as u32 + 1 {
+                    // draw separator
+                    let rect = &draw_item.rcItem;
+                    let hdc = draw_item.hDC;
+                    let bg_color = COLORREF(0x00222222);
+                    let brush = unsafe { CreateSolidBrush(bg_color) };
+                    unsafe { FillRect(hdc, rect, brush) };
+                    let _ = unsafe { DeleteObject(HGDIOBJ(brush.0)) };
+                    let pen = unsafe { CreatePen(PS_SOLID, 1, COLORREF(0x00444444)) };
+                    let old_pen = unsafe { SelectObject(hdc, HGDIOBJ(pen.0)) };
+                    let _ = unsafe {
+                        MoveToEx(
+                            hdc,
+                            rect.left,
+                            rect.top + (rect.bottom - rect.top) / 2,
+                            None,
+                        )
+                    };
+                    let _ =
+                        unsafe { LineTo(hdc, rect.right, rect.top + (rect.bottom - rect.top) / 2) };
+                    let _ = unsafe { SelectObject(hdc, old_pen) };
+                    let _ = unsafe { DeleteObject(HGDIOBJ(pen.0)) };
+                    return LRESULT(1);
+                }
+                let rect = &draw_item.rcItem;
+                let hdc = draw_item.hDC;
+                let bg_color = if (draw_item.itemState.0 & ODS_SELECTED.0) != 0 {
+                    COLORREF(0x00333333)
+                } else {
+                    COLORREF(0x00222222)
+                };
+                let text_color = if disabled {
+                    COLORREF(0x00888888)
+                } else {
+                    COLORREF(0x00FFFFFF)
+                };
+                let brush = unsafe { CreateSolidBrush(bg_color) };
+                unsafe { FillRect(hdc, rect, brush) };
+                let _ = unsafe { DeleteObject(HGDIOBJ(brush.0)) };
+                unsafe { SetBkColor(hdc, bg_color) };
+                unsafe { SetTextColor(hdc, text_color) };
+                let mut display_text = text.to_string();
+                if checked {
+                    display_text = format!("✓ {}", display_text);
+                }
+                let mut text_wide: Vec<u16> = display_text
+                    .encode_utf16()
+                    .chain(std::iter::once(0))
+                    .collect();
+                let draw_rect = RECT {
+                    left: rect.left + if checked { 8 } else { 24 },
+                    top: rect.top + 4,
+                    right: rect.right - 8,
+                    bottom: rect.bottom - 4,
+                };
+                let mut rect_copy = draw_rect;
+                unsafe {
+                    DrawTextW(
+                        hdc,
+                        &mut text_wide,
+                        &mut rect_copy as *mut _,
+                        DT_LEFT | DT_SINGLELINE | DT_VCENTER,
+                    )
+                };
+                return LRESULT(1);
+            }
+        }
         WM_DESTROY => {
             PostQuitMessage(0);
         }
@@ -48,67 +151,69 @@ pub fn show_menu(hwnd: HWND, config: &mut Config) {
         let hmenu = CreatePopupMenu().unwrap();
         let all_monitors = get_monitors();
 
-        // Add header for secondary monitors
-        let disabled_text = "Secondary Monitors:";
-        let disabled_wide: Vec<u16> = disabled_text.encode_utf16().chain(std::iter::once(0)).collect();
-        let _ = AppendMenuW(hmenu, MF_DISABLED | MF_STRING, 0, PCWSTR(disabled_wide.as_ptr()));
+        // Header
+        let id = 0u32;
+        let _ = AppendMenuW(hmenu, MF_OWNERDRAW, id as usize, PCWSTR::null());
 
-        for (i, (monitor, friendly_name)) in all_monitors.iter().enumerate() {
-            let checked = config.secondary_monitors.contains(monitor);
-            let flags = if checked { MF_CHECKED } else { MF_UNCHECKED } | MF_STRING;
-
-            // Use friendly name if available, otherwise use device name
-            let display_name = friendly_name;
-
-            let monitor_wide: Vec<u16> = display_name
-                .encode_utf16()
-                .chain(std::iter::once(0))
-                .collect();
-            let _ = AppendMenuW(
-                hmenu,
-                flags,
-                (i + 1) as usize,
-                PCWSTR(monitor_wide.as_ptr()),
-            );
+        // Monitors
+        for (i, _) in all_monitors.iter().enumerate() {
+            let id = (i + 1) as u32;
+            let _ = AppendMenuW(hmenu, MF_OWNERDRAW, id as usize, PCWSTR::null());
         }
 
-        // Add separator
-        let _ = AppendMenuW(hmenu, MF_SEPARATOR, 0, PCWSTR::null());
+        // Separator
+        let id = (all_monitors.len() + 1) as u32;
+        let _ = AppendMenuW(hmenu, MF_OWNERDRAW, id as usize, PCWSTR::null());
 
-        // Add exit option
-        let exit_text = "Exit";
-        let exit_wide: Vec<u16> = exit_text.encode_utf16().chain(std::iter::once(0)).collect();
-        let _ = AppendMenuW(hmenu, MF_STRING, (all_monitors.len() + 1) as usize, PCWSTR(exit_wide.as_ptr()));
+        // Exit
+        let id = (all_monitors.len() + 2) as u32;
+        let _ = AppendMenuW(hmenu, MF_OWNERDRAW, id as usize, PCWSTR::null());
 
         let mut pt: POINT = std::mem::zeroed();
         GetCursorPos(&mut pt).unwrap();
-        let cmd = TrackPopupMenu(
-            hmenu,
-            TPM_RETURNCMD | TPM_NONOTIFY,
-            pt.x,
-            pt.y,
-            Some(0),
-            hwnd,
-            None,
-        );
-        if cmd.0 > 0 {
-            let index = (cmd.0 - 1) as usize;
-            if index < all_monitors.len() {
-                if let Some((monitor, _)) = all_monitors.get(index) {
-                    if config.secondary_monitors.contains(monitor) {
-                        config.secondary_monitors.retain(|m| m != monitor);
-                        save_config(config);
-                    } else {
-                        // Prevent marking all monitors as secondary
-                        if config.secondary_monitors.len() + 1 < all_monitors.len() {
-                            config.secondary_monitors.push(monitor.clone());
+
+        // Required for tray menus: set foreground window so menu dismisses when clicking outside
+        let _ = SetForegroundWindow(hwnd);
+
+        loop {
+            let cmd = TrackPopupMenu(
+                hmenu,
+                TPM_RETURNCMD | TPM_NONOTIFY,
+                pt.x,
+                pt.y,
+                Some(0),
+                hwnd,
+                None,
+            );
+
+            // Required for tray menus: post a message to ensure menu closes properly
+            let _ = PostMessageW(Some(hwnd), WM_NULL, WPARAM(0), LPARAM(0));
+
+            if cmd.0 > 0 {
+                let index = (cmd.0 - 1) as usize;
+                if index < all_monitors.len() {
+                    if let Some((monitor, _)) = all_monitors.get(index) {
+                        if config.secondary_monitors.contains(monitor) {
+                            config.secondary_monitors.retain(|m| m != monitor);
                             save_config(config);
+                        } else {
+                            // Prevent marking all monitors as secondary
+                            if config.secondary_monitors.len() + 1 < all_monitors.len() {
+                                config.secondary_monitors.push(monitor.clone());
+                                save_config(config);
+                            }
                         }
                     }
+                    // Continue the loop to re-show the menu
+                } else if index == all_monitors.len() + 1 {
+                    // Exit
+                    PostQuitMessage(0);
+                    break;
+                } else {
+                    break;
                 }
-            } else if index == all_monitors.len() {
-                // Exit
-                PostQuitMessage(0);
+            } else {
+                break;
             }
         }
         let _ = DestroyMenu(hmenu);
