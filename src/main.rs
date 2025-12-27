@@ -14,9 +14,8 @@ use windows::Win32::UI::Shell::{
     Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DispatchMessageW, GetMessageW, RegisterClassW, ShowWindow,
-    TranslateMessage, CW_USEDEFAULT, MSG, SW_HIDE, WINDOW_EX_STYLE, WM_USER,
-    WNDCLASSW, WS_OVERLAPPEDWINDOW,
+    CreateWindowExW, DispatchMessageW, GetMessageW, RegisterClassW, ShowWindow, TranslateMessage,
+    CW_USEDEFAULT, MSG, SW_HIDE, WINDOW_EX_STYLE, WM_USER, WNDCLASSW, WS_OVERLAPPEDWINDOW,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -25,8 +24,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     }
     let mut config = config::load_config();
-    config.saved_modes.clear(); // clear old saved modes
-    monitors::update_secondary_monitors(&mut config);
+
+    // Only update secondary monitors if starting fresh (no saved disabled state)
+    // If monitors were disabled when app closed, keep that state
+    if config.saved_modes.is_empty() {
+        monitors::update_secondary_monitors(&mut config);
+    }
 
     // Print monitor information
     let all_monitors = monitors::get_monitors();

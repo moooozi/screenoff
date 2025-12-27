@@ -8,8 +8,8 @@ use windows::Win32::UI::Controls::{DRAWITEMSTRUCT, MEASUREITEMSTRUCT, ODS_SELECT
 use windows::Win32::UI::Shell::{Shell_NotifyIconW, NIF_ICON, NIM_MODIFY, NOTIFYICONDATAW};
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, DefWindowProcW, DestroyMenu, GetCursorPos, LoadImageW,
-    PostMessageW, PostQuitMessage, SetForegroundWindow, TrackPopupMenu, HICON, IMAGE_ICON,
-    LR_LOADFROMFILE, MF_OWNERDRAW, TPM_NONOTIFY, TPM_RETURNCMD, WM_DESTROY, WM_LBUTTONUP, WM_NULL,
+    PostMessageW, PostQuitMessage, SetForegroundWindow, TrackPopupMenu, HICON, IMAGE_FLAGS,
+    IMAGE_ICON, MF_OWNERDRAW, TPM_NONOTIFY, TPM_RETURNCMD, WM_DESTROY, WM_LBUTTONUP, WM_NULL,
     WM_RBUTTONUP, WM_USER,
 };
 
@@ -20,7 +20,8 @@ pub static mut CONFIG: *mut Config = std::ptr::null_mut();
 
 pub static mut TRAY_HWND: HWND = HWND(std::ptr::null_mut());
 
-pub static mut HINSTANCE: windows::Win32::Foundation::HINSTANCE = windows::Win32::Foundation::HINSTANCE(std::ptr::null_mut());
+pub static mut HINSTANCE: windows::Win32::Foundation::HINSTANCE =
+    windows::Win32::Foundation::HINSTANCE(std::ptr::null_mut());
 
 pub const IDI_SCREEN_ON: u16 = 101;
 pub const IDI_SCREEN_OFF: u16 = 102;
@@ -93,22 +94,39 @@ pub unsafe extern "system" fn window_proc(
             if draw_item.CtlType == ODT_MENU {
                 let item_id = draw_item.itemID;
                 let all_monitors = get_monitors();
-                let (text, checked, disabled) = if item_id == 0 {
-                    ("Select Monitors to turn off:", false, true)
-                } else if item_id <= all_monitors.len() as u32 {
-                    let index = (item_id - 1) as usize;
-                    let (monitor, friendly_name) = &all_monitors[index];
-                    let checked = unsafe { (*CONFIG).secondary_monitors.contains(monitor) };
-                    (friendly_name.as_str(), checked, false)
-                } else if item_id == all_monitors.len() as u32 + 1 {
-                    // separator, but we'll handle separately
-                    ("", false, false)
-                } else if item_id == all_monitors.len() as u32 + 2 {
-                    ("Exit", false, false)
+                let screens_off = unsafe { !(*CONFIG).saved_modes.is_empty() };
+
+                let (text, checked, disabled, is_separator) = if screens_off {
+                    // Screen off mode menu
+                    if item_id == 1000 {
+                        ("Turn back on", false, false, false)
+                    } else if item_id == 1001 {
+                        ("", false, false, true)
+                    } else if item_id == 1002 {
+                        ("Exit", false, false, false)
+                    } else {
+                        ("", false, false, false)
+                    }
                 } else {
-                    ("", false, false)
+                    // Screen on mode menu
+                    if item_id == 0 {
+                        ("Select Monitors to turn off:", false, true, false)
+                    } else if item_id <= all_monitors.len() as u32 {
+                        let index = (item_id - 1) as usize;
+                        let (monitor, friendly_name) = &all_monitors[index];
+                        let checked = unsafe { (*CONFIG).secondary_monitors.contains(monitor) };
+                        (friendly_name.as_str(), checked, false, false)
+                    } else if item_id == all_monitors.len() as u32 + 1 {
+                        ("", false, false, true)
+                    } else if item_id == all_monitors.len() as u32 + 2 {
+                        ("Turn off selected screens", false, false, false)
+                    } else if item_id == all_monitors.len() as u32 + 3 {
+                        ("Exit", false, false, false)
+                    } else {
+                        ("", false, false, false)
+                    }
                 };
-                if item_id == all_monitors.len() as u32 + 1 {
+                if is_separator {
                     // draw separator
                     let rect = &draw_item.rcItem;
                     let hdc = draw_item.hDC;
@@ -187,24 +205,42 @@ pub fn show_menu(hwnd: HWND, config: &mut Config) {
     unsafe {
         let hmenu = CreatePopupMenu().unwrap();
         let all_monitors = get_monitors();
+        let screens_off = !config.saved_modes.is_empty();
 
-        // Header
-        let id = 0u32;
-        let _ = AppendMenuW(hmenu, MF_OWNERDRAW, id as usize, PCWSTR::null());
+        if screens_off {
+            // Screen off mode: Show "Turn back on" and "Exit" only
+            // "Turn back on"
+            let _ = AppendMenuW(hmenu, MF_OWNERDRAW, 1000 as usize, PCWSTR::null());
 
-        // Monitors
-        for (i, _) in all_monitors.iter().enumerate() {
-            let id = (i + 1) as u32;
+            // Separator
+            let _ = AppendMenuW(hmenu, MF_OWNERDRAW, 1001 as usize, PCWSTR::null());
+
+            // Exit
+            let _ = AppendMenuW(hmenu, MF_OWNERDRAW, 1002 as usize, PCWSTR::null());
+        } else {
+            // Screen on mode: Show full menu
+            // Header
+            let id = 0u32;
+            let _ = AppendMenuW(hmenu, MF_OWNERDRAW, id as usize, PCWSTR::null());
+
+            // Monitors
+            for (i, _) in all_monitors.iter().enumerate() {
+                let id = (i + 1) as u32;
+                let _ = AppendMenuW(hmenu, MF_OWNERDRAW, id as usize, PCWSTR::null());
+            }
+
+            // Separator
+            let id = (all_monitors.len() + 1) as u32;
+            let _ = AppendMenuW(hmenu, MF_OWNERDRAW, id as usize, PCWSTR::null());
+
+            // "Turn off selected screens"
+            let id = (all_monitors.len() + 2) as u32;
+            let _ = AppendMenuW(hmenu, MF_OWNERDRAW, id as usize, PCWSTR::null());
+
+            // Exit
+            let id = (all_monitors.len() + 3) as u32;
             let _ = AppendMenuW(hmenu, MF_OWNERDRAW, id as usize, PCWSTR::null());
         }
-
-        // Separator
-        let id = (all_monitors.len() + 1) as u32;
-        let _ = AppendMenuW(hmenu, MF_OWNERDRAW, id as usize, PCWSTR::null());
-
-        // Exit
-        let id = (all_monitors.len() + 2) as u32;
-        let _ = AppendMenuW(hmenu, MF_OWNERDRAW, id as usize, PCWSTR::null());
 
         let mut pt: POINT = std::mem::zeroed();
         GetCursorPos(&mut pt).unwrap();
@@ -227,27 +263,47 @@ pub fn show_menu(hwnd: HWND, config: &mut Config) {
             let _ = PostMessageW(Some(hwnd), WM_NULL, WPARAM(0), LPARAM(0));
 
             if cmd.0 > 0 {
-                let index = (cmd.0 - 1) as usize;
-                if index < all_monitors.len() {
-                    if let Some((monitor, _)) = all_monitors.get(index) {
-                        if config.secondary_monitors.contains(monitor) {
-                            config.secondary_monitors.retain(|m| m != monitor);
-                            save_config(config);
-                        } else {
-                            // Prevent marking all monitors as secondary
-                            if config.secondary_monitors.len() + 1 < all_monitors.len() {
-                                config.secondary_monitors.push(monitor.clone());
+                if screens_off {
+                    // Screen off mode menu
+                    if cmd.0 == 1000 {
+                        // "Turn back on"
+                        toggle_monitors(config);
+                        break;
+                    } else if cmd.0 == 1002 {
+                        // Exit
+                        PostQuitMessage(0);
+                        break;
+                    } else {
+                        break;
+                    }
+                } else {
+                    // Screen on mode menu
+                    let index = (cmd.0 - 1) as usize;
+                    if index < all_monitors.len() {
+                        if let Some((monitor, _)) = all_monitors.get(index) {
+                            if config.secondary_monitors.contains(monitor) {
+                                config.secondary_monitors.retain(|m| m != monitor);
                                 save_config(config);
+                            } else {
+                                // Prevent marking all monitors as secondary
+                                if config.secondary_monitors.len() + 1 < all_monitors.len() {
+                                    config.secondary_monitors.push(monitor.clone());
+                                    save_config(config);
+                                }
                             }
                         }
+                        // Continue the loop to re-show the menu
+                    } else if index == all_monitors.len() + 1 {
+                        // "Turn off selected screens"
+                        toggle_monitors(config);
+                        break;
+                    } else if index == all_monitors.len() + 2 {
+                        // Exit
+                        PostQuitMessage(0);
+                        break;
+                    } else {
+                        break;
                     }
-                    // Continue the loop to re-show the menu
-                } else if index == all_monitors.len() + 1 {
-                    // Exit
-                    PostQuitMessage(0);
-                    break;
-                } else {
-                    break;
                 }
             } else {
                 break;
