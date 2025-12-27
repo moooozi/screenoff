@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 mod config;
 mod monitors;
 mod tray;
@@ -5,7 +7,9 @@ mod tray;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::HINSTANCE;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::UI::HiDpi::{SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2};
+use windows::Win32::UI::HiDpi::{
+    SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+};
 use windows::Win32::UI::Shell::{
     Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW,
 };
