@@ -13,7 +13,7 @@ use windows::Win32::UI::Shell::{Shell_NotifyIconW, NIF_ICON, NIM_MODIFY, NOTIFYI
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, DefWindowProcW, DestroyMenu, GetCursorPos, LoadImageW,
     PostMessageW, PostQuitMessage, SetForegroundWindow, TrackPopupMenu, HICON, IMAGE_FLAGS,
-    IMAGE_ICON, MF_OWNERDRAW, TPM_NONOTIFY, TPM_RETURNCMD, WM_DESTROY, WM_HOTKEY, WM_LBUTTONUP,
+    IMAGE_ICON, MF_OWNERDRAW, TPM_NONOTIFY, TPM_RETURNCMD, WM_DESTROY, WM_HOTKEY, WM_LBUTTONDBLCLK,
     WM_NULL, WM_RBUTTONUP, WM_USER,
 };
 
@@ -180,8 +180,8 @@ pub unsafe extern "system" fn window_proc(
 ) -> LRESULT {
     match msg {
         WM_USER => {
-            if lparam.0 as u32 == WM_LBUTTONUP {
-                // left click, toggle
+            if lparam.0 as u32 == WM_LBUTTONDBLCLK {
+                // double left click, toggle
                 unsafe {
                     if !CONFIG.is_null() {
                         toggle_monitors(&mut *CONFIG);
