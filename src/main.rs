@@ -7,6 +7,11 @@ mod tray;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::HINSTANCE;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::System::Threading::{
+    CreateMutexW, GetCurrentProcess, ProcessPowerThrottling, SetProcessInformation,
+    PROCESS_POWER_THROTTLING_CURRENT_VERSION, PROCESS_POWER_THROTTLING_EXECUTION_SPEED,
+    PROCESS_POWER_THROTTLING_STATE,
+};
 use windows::Win32::UI::HiDpi::{
     SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
 };
@@ -26,6 +31,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     unsafe {
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     }
+    // Enable energy efficiency mode (EcoQoS)
+    unsafe {
+        let throttling_state = PROCESS_POWER_THROTTLING_STATE {
+            Version: PROCESS_POWER_THROTTLING_CURRENT_VERSION,
+            ControlMask: PROCESS_POWER_THROTTLING_EXECUTION_SPEED,
+            StateMask: PROCESS_POWER_THROTTLING_EXECUTION_SPEED,
+        };
+
+        match SetProcessInformation(
+            GetCurrentProcess(),
+            ProcessPowerThrottling,
+            &throttling_state as *const _ as *mut std::ffi::c_void,
+            std::mem::size_of::<PROCESS_POWER_THROTTLING_STATE>() as u32,
+        ) {
+            Ok(_) => eprintln!("✓ Energy efficiency mode enabled successfully"),
+            Err(e) => eprintln!("✗ Failed to enable energy efficiency mode: {:?}", e),
+        }
+    }
+
     let mut config = config::load_config();
 
     // Only update secondary monitors if starting fresh (no saved disabled state)
