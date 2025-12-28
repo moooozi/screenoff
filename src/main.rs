@@ -5,7 +5,7 @@ mod monitors;
 mod tray;
 
 use windows::core::PCWSTR;
-use windows::Win32::Foundation::HINSTANCE;
+use windows::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS, HINSTANCE};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::{
     CreateMutexW, GetCurrentProcess, ProcessPowerThrottling, SetProcessInformation,
@@ -27,6 +27,19 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Prevent multiple instances
+    unsafe {
+        let mutex_name: Vec<u16> = "Global\\ScreenOffMutex"
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        let _mutex = CreateMutexW(None, true, PCWSTR(mutex_name.as_ptr())).ok();
+        if GetLastError() == ERROR_ALREADY_EXISTS {
+            eprintln!("Another instance of ScreenOff is already running.");
+            return Ok(());
+        }
+    }
+
     // Set DPI awareness to prevent blurry text
     unsafe {
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
