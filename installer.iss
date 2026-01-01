@@ -8,11 +8,12 @@
 AppId=dev.zidane.screenoff
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+AppVerName={#MyAppName} v{#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
-DefaultDirName={userpf}\{#MyAppName}
+DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
@@ -21,8 +22,11 @@ OutputBaseFilename=ScreenOff-Setup-{#MyAppVersion}
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern dark includetitlebar
-SetupIconFile=icons\app_icon.ico
+SetupIconFile=icons\app_icon.ico 
 UninstallDisplayIcon={app}\{#MyAppExeName}
+UninstallDisplayName={#MyAppName}
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
 
 
 [Languages]
@@ -36,6 +40,9 @@ Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
+
+[UninstallRun]
+Filename: "taskkill.exe"; Parameters: "/f /im screenoff.exe"; RunOnceId: "KillApp"; Flags: runhidden
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
