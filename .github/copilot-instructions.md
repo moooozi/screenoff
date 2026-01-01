@@ -1,10 +1,10 @@
 # ScreenOff - AI Instructions
 
 Multi-file Windows tray app for toggling secondary monitors using Win32 API directly. Code is organized into modules:
-- [src/main.rs](../src/main.rs): Main entry point and window setup
-- [src/config.rs](../src/config.rs): Configuration loading/saving
-- [src/monitors.rs](../src/monitors.rs): Monitor enumeration, WMI queries for EDID names, and display control
-- [src/tray.rs](../src/tray.rs): System tray icon and menu handling
+- `src/main.rs`: Main entry point and window setup
+- `src/config.rs`: Configuration loading/saving
+- `src/monitors.rs`: Monitor enumeration, WMI queries for EDID names, and display control
+- `src/tray.rs`: System tray icon and menu handling
 
 ## Development Workflow
 
